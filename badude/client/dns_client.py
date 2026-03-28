@@ -87,6 +87,16 @@ class DNSTunnelClient:
         # Parse TXT records
         txt_parts = dns_codec.parse_dns_response(response_wire)
         if not txt_parts:
+            from dnslib import DNSRecord
+            try:
+                resp = DNSRecord.parse(response_wire)
+                logger.error(
+                    "DNS response: rcode=%s flags=%s answers=%d qname=%s",
+                    resp.header.rcode, hex(resp.header.bitmap), len(resp.rr),
+                    resp.q.qname,
+                )
+            except Exception:
+                logger.error("Could not parse DNS response (%d bytes)", len(response_wire))
             logger.error("No TXT records in response")
             return None
 

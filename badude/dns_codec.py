@@ -106,11 +106,15 @@ def build_dns_response(query_wire: bytes, txt_data: bytes) -> bytes:
     return reply.pack()
 
 
-def build_dns_error_response(query_wire: bytes, rcode: int = 3) -> bytes:
-    """Build a DNS error response (default NXDOMAIN)."""
+def build_dns_error_response(query_wire: bytes) -> bytes:
+    """Build a DNS error response as NOERROR with empty answer.
+
+    Uses NOERROR (rcode=0) instead of NXDOMAIN to prevent resolvers
+    from negative-caching and blocking future queries to the domain.
+    """
     request = DNSRecord.parse(query_wire)
     reply = request.reply()
-    reply.header.rcode = rcode
+    reply.header.rcode = 0
     return reply.pack()
 
 

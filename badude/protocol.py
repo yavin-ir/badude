@@ -12,7 +12,7 @@ CHUNK_HEADER_LEN = 2  # chunk_count(1) + chunk_index(1)
 MAX_TXT_RDATA = 900  # conservative limit for TXT record data
 MAX_LABEL_LEN = 63
 MAX_NAME_LEN = 253
-RESPONSE_TTL = 60
+RESPONSE_TTL = 0
 CHUNK_CACHE_TTL = 30
 
 

@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
 
 from .dns_client import DNSTunnelClient
@@ -73,6 +74,7 @@ class WebHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.end_headers()
             self.wfile.write(data)
         except FileNotFoundError:
@@ -142,6 +144,20 @@ class WebHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "invalid json"}, 400)
                 return
 
+            # If secret is empty, keep the existing one
+            if not settings.get("secret") and self.dns_client:
+                settings["secret"] = self.dns_client.secret
+
+            if not settings.get("secret"):
+                # Try loading from saved settings
+                saved = _load_settings(self.settings_path)
+                if saved and saved.get("secret"):
+                    settings["secret"] = saved["secret"]
+
+            if not settings.get("secret"):
+                self._send_json({"error": "secret is required"}, 400)
+                return
+
             WebHandler.dns_client = _client_from_settings(settings)
 
             # Persist to disk
@@ -175,8 +191,11 @@ def run_server(
             dns_client = _client_from_settings(saved)
             logger.info("Loaded saved settings from %s", settings_path)
 
+    class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+        daemon_threads = True
+
     WebHandler.dns_client = dns_client
-    server = HTTPServer((host, port), WebHandler)
+    server = ThreadedHTTPServer((host, port), WebHandler)
     logger.info("Web server listening on http://%s:%d", host, port)
     try:
         server.serve_forever()
