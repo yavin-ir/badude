@@ -144,30 +144,3 @@ def fetch_before(channel: str, before_id: int) -> list[Message]:
         return []
     _, messages = _parse_page(resp.text, channel)
     return messages
-
-
-def fetch_latest(channel: str) -> list[Message]:
-    """Fetch the latest messages from a public Telegram channel."""
-    url = TELEGRAM_URL.format(channel=channel)
-    try:
-        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=15)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        logger.error("Failed to fetch %s: %s", url, e)
-        return []
-    return _parse_messages(resp.text, channel)
-
-
-def fetch_before(channel: str, before_id: int) -> list[Message]:
-    """Fetch older messages before a given message ID."""
-    url = TELEGRAM_URL.format(channel=channel)
-    params = {"before": before_id}
-    try:
-        resp = requests.get(
-            url, params=params, headers={"User-Agent": USER_AGENT}, timeout=15
-        )
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        logger.error("Failed to fetch %s before %d: %s", url, before_id, e)
-        return []
-    return _parse_messages(resp.text, channel)
