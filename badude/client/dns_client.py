@@ -9,7 +9,8 @@ from .. import protocol, dns_codec
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 5
-MAX_RETRIES = 2
+MAX_RETRIES = 3
+REQUEST_ATTEMPTS = 3  # retry entire request with fresh nonce
 
 
 class DNSTunnelClient:
@@ -46,63 +47,77 @@ class DNSTunnelClient:
         sock.settimeout(self.timeout)
         try:
             sock.sendto(query_wire, self._target)
-            data, _ = sock.recvfrom(4096)
+            data, _ = sock.recvfrom(65535)
             return data
         finally:
             sock.close()
 
-    def _send_recv_retry(self, query_wire: bytes) -> bytes | None:
-        """Send/receive with retry logic."""
+    def _send_recv_validated(self, query_wire: bytes) -> bytes | None:
+        """Send/receive with retry on timeout and SERVFAIL."""
+        from dnslib import DNSRecord
+
         for attempt in range(MAX_RETRIES):
             try:
-                return self._send_recv(query_wire)
+                data = self._send_recv(query_wire)
             except socket.timeout:
                 logger.warning("Timeout (attempt %d/%d)", attempt + 1, MAX_RETRIES)
+                continue
             except OSError as e:
                 logger.error("Network error: %s", e)
-                break
+                return None
+
+            # Check for SERVFAIL / other error rcodes — retry those
+            try:
+                resp = DNSRecord.parse(data)
+                rcode = resp.header.rcode
+                if rcode == 2:  # SERVFAIL
+                    logger.warning(
+                        "SERVFAIL (attempt %d/%d)", attempt + 1, MAX_RETRIES
+                    )
+                    continue
+                if rcode == 5:  # REFUSED
+                    logger.warning(
+                        "REFUSED (attempt %d/%d)", attempt + 1, MAX_RETRIES
+                    )
+                    continue
+            except Exception:
+                pass
+
+            return data
         return None
 
-    def request(self, action: dict) -> dict | None:
-        """Send a request action dict and return the response dict.
+    def _do_request(self, plaintext: bytes) -> dict | None:
+        """Single attempt: encrypt, send, collect chunks, decrypt."""
+        from dnslib import DNSRecord
 
-        action examples:
-          {"a": "ch"}                           - list channels
-          {"a": "ms", "c": "durov", "l": 10}    - get messages
-        """
-        # Serialize and encrypt (req_id is derived from nonce, first 4 bytes)
-        plaintext = json.dumps(action, separators=(",", ":")).encode("utf-8")
+        # Encrypt with fresh nonce each attempt (→ different query name)
         encrypted = protocol.encrypt(self.key, plaintext)
-        payload = encrypted
 
         # Encode as DNS query
-        qname = dns_codec.encode_query_name(payload, self.domain)
+        qname = dns_codec.encode_query_name(encrypted, self.domain)
         query_wire = dns_codec.build_dns_query(qname)
 
         # Send and receive first response
-        response_wire = self._send_recv_retry(query_wire)
+        response_wire = self._send_recv_validated(query_wire)
         if response_wire is None:
             return None
 
         # Parse TXT records
         txt_parts = dns_codec.parse_dns_response(response_wire)
         if not txt_parts:
-            from dnslib import DNSRecord
             try:
                 resp = DNSRecord.parse(response_wire)
-                logger.error(
-                    "DNS response: rcode=%s flags=%s answers=%d qname=%s",
+                logger.warning(
+                    "Empty response: rcode=%s flags=%s answers=%d",
                     resp.header.rcode, hex(resp.header.bitmap), len(resp.rr),
-                    resp.q.qname,
                 )
             except Exception:
-                logger.error("Could not parse DNS response (%d bytes)", len(response_wire))
-            logger.error("No TXT records in response")
+                logger.warning("Could not parse DNS response (%d bytes)", len(response_wire))
             return None
 
         first_chunk = txt_parts[0]
         if len(first_chunk) < protocol.CHUNK_HEADER_LEN + protocol.REQ_ID_LEN:
-            logger.error("Response chunk too short")
+            logger.warning("Response chunk too short")
             return None
 
         chunk_count = first_chunk[0]
@@ -122,17 +137,18 @@ class DNSTunnelClient:
                     resp_req_id, idx, self.domain
                 )
                 poll_wire = dns_codec.build_dns_query(poll_qname)
-                poll_resp = self._send_recv_retry(poll_wire)
+                poll_resp = self._send_recv_validated(poll_wire)
                 if poll_resp is None:
-                    logger.error("Failed to poll chunk %d", idx)
+                    logger.warning("Failed to poll chunk %d/%d", idx, chunk_count)
                     return None
                 poll_parts = dns_codec.parse_dns_response(poll_resp)
                 if not poll_parts:
-                    logger.error("No TXT in poll response for chunk %d", idx)
+                    logger.warning("No TXT in poll response for chunk %d", idx)
                     return None
                 poll_chunk = poll_parts[0]
                 if len(poll_chunk) < protocol.CHUNK_HEADER_LEN + protocol.REQ_ID_LEN:
-                    continue
+                    logger.warning("Poll chunk %d too short", idx)
+                    return None
                 p_data = poll_chunk[2 + protocol.REQ_ID_LEN :]
                 all_chunks[idx] = p_data
 
@@ -140,19 +156,40 @@ class DNSTunnelClient:
         encrypted_data = b""
         for i in range(chunk_count):
             if i not in all_chunks:
-                logger.error("Missing chunk %d", i)
+                logger.warning("Missing chunk %d", i)
                 return None
             encrypted_data += all_chunks[i]
 
         # Decrypt
         try:
-            plaintext = protocol.decrypt(self.key, encrypted_data)
+            decrypted = protocol.decrypt(self.key, encrypted_data)
         except Exception as e:
-            logger.error("Decryption failed: %s", e)
+            logger.warning("Decryption failed: %s", e)
             return None
 
         try:
-            return json.loads(plaintext)
+            return json.loads(decrypted)
         except json.JSONDecodeError as e:
-            logger.error("Invalid JSON response: %s", e)
+            logger.warning("Invalid JSON response: %s", e)
             return None
+
+    def request(self, action: dict) -> dict | None:
+        """Send a request action dict and return the response dict.
+
+        Retries the entire request with a fresh nonce on failure,
+        which generates a different DNS query name (bypasses resolver cache).
+        """
+        plaintext = json.dumps(action, separators=(",", ":")).encode("utf-8")
+
+        for attempt in range(REQUEST_ATTEMPTS):
+            result = self._do_request(plaintext)
+            if result is not None:
+                return result
+            if attempt < REQUEST_ATTEMPTS - 1:
+                logger.info(
+                    "Request failed, retrying with fresh nonce (%d/%d)...",
+                    attempt + 2, REQUEST_ATTEMPTS,
+                )
+
+        logger.error("Request failed after %d attempts", REQUEST_ATTEMPTS)
+        return None
