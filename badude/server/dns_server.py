@@ -1,0 +1,217 @@
+"""UDP DNS server that handles tunnel requests and serves chunked responses."""
+
+import json
+import logging
+import socket
+import threading
+import time
+
+from .. import protocol, dns_codec
+from .store import MessageStore
+
+logger = logging.getLogger(__name__)
+
+
+class ChunkCache:
+    """Cache chunked responses so clients can poll for remaining chunks."""
+
+    def __init__(self, ttl: int = protocol.CHUNK_CACHE_TTL):
+        self._lock = threading.Lock()
+        self._cache: dict[bytes, tuple[list[bytes], float]] = {}
+        self._ttl = ttl
+
+    def store(self, req_id: bytes, chunks: list[bytes]) -> None:
+        with self._lock:
+            self._cache[req_id] = (chunks, time.time())
+
+    def get(self, req_id: bytes, chunk_idx: int) -> bytes | None:
+        with self._lock:
+            entry = self._cache.get(req_id)
+            if entry is None:
+                return None
+            chunks, ts = entry
+            if time.time() - ts > self._ttl:
+                del self._cache[req_id]
+                return None
+            if chunk_idx < 0 or chunk_idx >= len(chunks):
+                return None
+            return chunks[chunk_idx]
+
+    def cleanup(self) -> None:
+        now = time.time()
+        with self._lock:
+            expired = [k for k, (_, ts) in self._cache.items() if now - ts > self._ttl]
+            for k in expired:
+                del self._cache[k]
+
+
+def _chunk_response(req_id: bytes, key: bytes, response_json: bytes) -> list[bytes]:
+    """Encrypt and chunk a response into DNS TXT-sized pieces.
+
+    Each chunk: chunk_count(1) + chunk_index(1) + request_id(4) + nonce(12) + ciphertext + tag(16)
+    """
+    encrypted = protocol.encrypt(key, response_json)
+    # Max payload per chunk after header
+    header_len = protocol.CHUNK_HEADER_LEN + protocol.REQ_ID_LEN
+    max_payload = protocol.MAX_TXT_RDATA - header_len
+    # Split encrypted data into chunks
+    parts = []
+    for i in range(0, len(encrypted), max_payload):
+        parts.append(encrypted[i : i + max_payload])
+    if not parts:
+        parts = [b""]
+    chunk_count = len(parts)
+    chunks = []
+    for idx, part in enumerate(parts):
+        chunk = bytes([chunk_count, idx]) + req_id + part
+        chunks.append(chunk)
+    return chunks
+
+
+class DNSServer:
+    def __init__(
+        self,
+        store: MessageStore,
+        domain: str,
+        key: bytes,
+        bind: str = "0.0.0.0",
+        port: int = 5553,
+    ):
+        self.store = store
+        self.domain = domain.rstrip(".")
+        self.key = key
+        self.bind = bind
+        self.port = port
+        self.chunk_cache = ChunkCache()
+        self._sock: socket.socket | None = None
+        self._running = False
+
+    def _handle_action(self, action: dict) -> dict:
+        """Dispatch an action request and return the response dict."""
+        a = action.get("a")
+        if a == "ch":
+            return {"channels": self.store.get_channels()}
+        elif a == "ms":
+            channel = action.get("c", "")
+            before = action.get("b")
+            limit = action.get("l", 20)
+            if before is not None:
+                before = int(before)
+            limit = min(int(limit), 50)
+            messages = self.store.get_messages(channel, before, limit)
+            return {"messages": messages}
+        else:
+            return {"error": "unknown action"}
+
+    def _handle_query(self, query_wire: bytes, addr: tuple) -> bytes:
+        """Process a DNS query and return the wire-format response."""
+        from dnslib import DNSRecord
+
+        try:
+            request = DNSRecord.parse(query_wire)
+        except Exception:
+            logger.debug("Failed to parse DNS query from %s", addr)
+            return dns_codec.build_dns_error_response(query_wire, rcode=1)
+
+        qname = str(request.q.qname).rstrip(".")
+
+        # Check if it's a poll query
+        poll = dns_codec.is_poll_query(qname, self.domain)
+        if poll is not None:
+            req_id, chunk_idx = poll
+            chunk = self.chunk_cache.get(req_id, chunk_idx)
+            if chunk is not None:
+                return dns_codec.build_dns_response(query_wire, chunk)
+            else:
+                return dns_codec.build_dns_error_response(query_wire)
+
+        # Regular data query - decode payload
+        try:
+            payload = dns_codec.decode_query_name(qname, self.domain)
+        except (ValueError, Exception) as e:
+            logger.debug("Failed to decode query name %s: %s", qname, e)
+            return dns_codec.build_dns_error_response(query_wire)
+
+        if len(payload) < protocol.REQ_ID_LEN:
+            return dns_codec.build_dns_error_response(query_wire)
+
+        req_id = payload[: protocol.REQ_ID_LEN]
+        encrypted_data = payload[protocol.REQ_ID_LEN :]
+
+        # Decrypt request
+        try:
+            plaintext = protocol.decrypt(self.key, encrypted_data)
+        except Exception as e:
+            logger.debug("Decryption failed: %s", e)
+            return dns_codec.build_dns_error_response(query_wire)
+
+        # Parse JSON action
+        try:
+            action = json.loads(plaintext)
+        except json.JSONDecodeError as e:
+            logger.debug("Invalid JSON: %s", e)
+            return dns_codec.build_dns_error_response(query_wire)
+
+        # Handle action
+        response_data = self._handle_action(action)
+        response_json = json.dumps(response_data, separators=(",", ":")).encode("utf-8")
+
+        # Chunk the response
+        chunks = _chunk_response(req_id, self.key, response_json)
+
+        # Cache all chunks for polling
+        if len(chunks) > 1:
+            self.chunk_cache.store(req_id, chunks)
+
+        # Return first chunk
+        return dns_codec.build_dns_response(query_wire, chunks[0])
+
+    def _serve_thread(self, query_wire: bytes, addr: tuple) -> None:
+        try:
+            response_wire = self._handle_query(query_wire, addr)
+            self._sock.sendto(response_wire, addr)
+        except Exception:
+            logger.exception("Error handling query from %s", addr)
+
+    def run(self) -> None:
+        """Start the DNS server (blocking)."""
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind((self.bind, self.port))
+        self._running = True
+        logger.info("DNS server listening on %s:%d", self.bind, self.port)
+        logger.info("Domain: %s", self.domain)
+
+        # Periodic cache cleanup
+        def cleanup_loop():
+            while self._running:
+                time.sleep(protocol.CHUNK_CACHE_TTL)
+                self.chunk_cache.cleanup()
+
+        t = threading.Thread(target=cleanup_loop, daemon=True)
+        t.start()
+
+        try:
+            while self._running:
+                try:
+                    data, addr = self._sock.recvfrom(4096)
+                except OSError:
+                    break
+                thread = threading.Thread(
+                    target=self._serve_thread, args=(data, addr), daemon=True
+                )
+                thread.start()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self._running = False
+            self._sock.close()
+            logger.info("DNS server stopped")
+
+    def stop(self) -> None:
+        self._running = False
+        if self._sock:
+            try:
+                self._sock.close()
+            except OSError:
+                pass

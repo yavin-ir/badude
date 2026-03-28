@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Badude - Telegram Channel Reader</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0e1621;
+    color: #f5f5f5;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.app {
+    display: flex;
+    height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 320px;
+    background: #17212b;
+    border-right: 1px solid #0e1621;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.sidebar-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #0e1621;
+}
+
+.sidebar-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #f5f5f5;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    color: #8b9bab;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.btn-icon:hover {
+    background: #232e3c;
+    color: #f5f5f5;
+}
+
+.channel-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.channel-item {
+    padding: 12px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: background 0.15s;
+}
+
+.channel-item:hover {
+    background: #232e3c;
+}
+
+.channel-item.active {
+    background: #2b5278;
+}
+
+.channel-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: #2b5278;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 600;
+    color: #f5f5f5;
+    flex-shrink: 0;
+}
+
+.channel-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.channel-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #f5f5f5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.channel-meta {
+    font-size: 12px;
+    color: #8b9bab;
+    margin-top: 2px;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #8b9bab;
+    text-align: center;
+    padding: 24px;
+}
+
+.empty-state p {
+    margin-top: 8px;
+    font-size: 14px;
+}
+
+/* Main pane */
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0e1621;
+}
+
+.main-header {
+    padding: 12px 20px;
+    background: #17212b;
+    border-bottom: 1px solid #0e1621;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.main-header .channel-name {
+    font-size: 16px;
+}
+
+.messages-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.loading-top {
+    text-align: center;
+    padding: 12px;
+    color: #8b9bab;
+    font-size: 13px;
+}
+
+.message-bubble {
+    background: #182533;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    max-width: 85%;
+    word-wrap: break-word;
+    position: relative;
+}
+
+.message-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #f5f5f5;
+    white-space: pre-wrap;
+}
+
+.message-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.message-views, .message-date {
+    font-size: 11px;
+    color: #8b9bab;
+}
+
+/* Settings modal */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.open {
+    display: flex;
+}
+
+.modal {
+    background: #17212b;
+    border-radius: 12px;
+    padding: 24px;
+    width: 480px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal h3 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    color: #f5f5f5;
+}
+
+.settings-section {
+    margin-bottom: 20px;
+}
+
+.settings-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #6ab3f3;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #232e3c;
+}
+
+.form-group {
+    margin-bottom: 12px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    color: #8b9bab;
+    margin-bottom: 4px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0e1621;
+    border: 1px solid #2b5278;
+    border-radius: 8px;
+    color: #f5f5f5;
+    font-size: 14px;
+    outline: none;
+}
+
+.form-group input:focus {
+    border-color: #6ab3f3;
+}
+
+.form-row {
+    display: flex;
+    gap: 10px;
+}
+
+.form-row .form-group { flex: 1; }
+.form-row .form-group.narrow { flex: 0 0 110px; }
+
+.form-hint {
+    font-size: 11px;
+    color: #6b7b8b;
+    margin-top: 4px;
+}
+
+.conn-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #0e1621;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.conn-dot.ok { background: #81c784; }
+.conn-dot.err { background: #e57373; }
+.conn-dot.off { background: #6b7b8b; }
+
+.modal-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-actions-right {
+    display: flex;
+    gap: 10px;
+}
+
+.btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background: #2b5278;
+    color: #f5f5f5;
+}
+
+.btn-primary:hover {
+    background: #3a6a99;
+}
+
+.btn-secondary {
+    background: #232e3c;
+    color: #8b9bab;
+}
+
+.btn-secondary:hover {
+    background: #2d3a4a;
+    color: #f5f5f5;
+}
+
+.btn-test {
+    background: #1a3a2a;
+    color: #81c784;
+}
+
+.btn-test:hover {
+    background: #234a34;
+}
+
+.status-bar {
+    padding: 4px 16px;
+    font-size: 12px;
+    color: #8b9bab;
+    background: #17212b;
+    border-top: 1px solid #0e1621;
+    text-align: center;
+}
+
+.status-bar.error { color: #e57373; }
+.status-bar.ok { color: #81c784; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2b5278; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3a6a99; }
+</style>
+</head>
+<body>
+
+<div class="app">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>Badude</h2>
+            <div>
+                <button class="btn-icon" onclick="loadChannels()" title="Refresh">&#x21bb;</button>
+                <button class="btn-icon" onclick="openSettings()" title="Settings">&#x2699;</button>
+            </div>
+        </div>
+        <div class="channel-list" id="channelList">
+            <div class="empty-state" id="channelEmpty">
+                <p>No channels loaded.<br>Configure settings and click refresh.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="main-header" id="mainHeader" style="display:none">
+            <div class="channel-avatar" id="headerAvatar"></div>
+            <div class="channel-name" id="headerName"></div>
+        </div>
+        <div class="messages-container" id="messagesContainer">
+            <div class="empty-state" id="messageEmpty">
+                <p>Select a channel to view messages</p>
+            </div>
+        </div>
+        <div class="status-bar" id="statusBar">Not connected</div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+        <h3>Settings</h3>
+
+        <div class="conn-status" id="connStatus">
+            <span class="conn-dot off" id="connDot"></span>
+            <span id="connText">Not configured</span>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-section-title">Badude Server</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Server Address</label>
+                    <input type="text" id="settServer" placeholder="1.2.3.4">
+                </div>
+                <div class="form-group narrow">
+                    <label>Port</label>
+                    <input type="number" id="settPort" placeholder="5553">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Domain</label>
+                <input type="text" id="settDomain" placeholder="tunnel.example.com">
+            </div>
+            <div class="form-group">
+                <label>Shared Secret</label>
+                <input type="password" id="settSecret" placeholder="Enter shared secret">
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-section-title">DNS Resolver</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Resolver Address</label>
+                    <input type="text" id="settDnsResolver" placeholder="Leave empty for direct connection">
+                </div>
+                <div class="form-group narrow">
+                    <label>Port</label>
+                    <input type="number" id="settDnsResolverPort" placeholder="53">
+                </div>
+            </div>
+            <div class="form-hint">
+                Route DNS queries through a resolver (e.g. 8.8.8.8) instead of connecting directly to the badude server.
+                Leave empty to send queries directly to the server address above.
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-test" onclick="testConnection()">Test Connection</button>
+            <div class="modal-actions-right">
+                <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const state = {
+    currentChannel: null,
+    channels: [],
+    messages: [],
+    loading: false,
+    hasMore: true,
+};
+
+function setStatus(msg, type) {
+    const el = document.getElementById('statusBar');
+    el.textContent = msg;
+    el.className = 'status-bar' + (type ? ' ' + type : '');
+}
+
+function setConnStatus(ok, text) {
+    const dot = document.getElementById('connDot');
+    const label = document.getElementById('connText');
+    dot.className = 'conn-dot ' + (ok === true ? 'ok' : ok === false ? 'err' : 'off');
+    label.textContent = text;
+}
+
+// Settings
+function openSettings() {
+    fetch('/api/settings').then(r => r.json()).then(data => {
+        if (data.configured) {
+            document.getElementById('settServer').value = data.server || '';
+            document.getElementById('settPort').value = data.port || 5553;
+            document.getElementById('settDomain').value = data.domain || '';
+            document.getElementById('settDnsResolver').value = data.dns_resolver || '';
+            document.getElementById('settDnsResolverPort').value = data.dns_resolver_port || 53;
+            document.getElementById('settSecret').value = '';
+            setConnStatus(true, 'Connected to ' + data.server + ':' + data.port +
+                (data.dns_resolver ? ' via ' + data.dns_resolver : ' (direct)'));
+        } else {
+            setConnStatus(null, 'Not configured');
+        }
+    }).catch(() => {
+        setConnStatus(false, 'Cannot reach local server');
+    });
+    document.getElementById('settingsModal').classList.add('open');
+}
+
+function closeSettings() {
+    document.getElementById('settingsModal').classList.remove('open');
+}
+
+function _getSettingsFromForm() {
+    return {
+        server: document.getElementById('settServer').value.trim(),
+        port: parseInt(document.getElementById('settPort').value) || 5553,
+        domain: document.getElementById('settDomain').value.trim(),
+        secret: document.getElementById('settSecret').value,
+        dns_resolver: document.getElementById('settDnsResolver').value.trim(),
+        dns_resolver_port: parseInt(document.getElementById('settDnsResolverPort').value) || 53,
+    };
+}
+
+function saveSettings() {
+    const settings = _getSettingsFromForm();
+    if (!settings.server || !settings.domain) {
+        setConnStatus(false, 'Server address and domain are required');
+        return;
+    }
+    setConnStatus(null, 'Saving...');
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(settings),
+    }).then(r => r.json()).then(data => {
+        if (data.ok) {
+            setConnStatus(true, 'Settings saved');
+            setStatus('Settings saved', 'ok');
+            closeSettings();
+            loadChannels();
+        } else {
+            setConnStatus(false, data.error || 'Failed to save');
+        }
+    }).catch(e => {
+        setConnStatus(false, 'Error: ' + e.message);
+    });
+}
+
+function testConnection() {
+    const settings = _getSettingsFromForm();
+    if (!settings.server || !settings.domain) {
+        setConnStatus(false, 'Server address and domain are required');
+        return;
+    }
+    setConnStatus(null, 'Testing...');
+    // Save temporarily to test
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(settings),
+    }).then(r => r.json()).then(data => {
+        if (!data.ok) {
+            setConnStatus(false, 'Failed to apply settings');
+            return;
+        }
+        // Try to fetch channels as a connectivity test
+        return fetch('/api/channels').then(r => r.json());
+    }).then(data => {
+        if (!data) return;
+        if (data.error) {
+            setConnStatus(false, 'Connection failed: ' + data.error);
+        } else {
+            const count = (data.channels || []).length;
+            setConnStatus(true, 'Connected (' + count + ' channel' + (count !== 1 ? 's' : '') + ')');
+        }
+    }).catch(e => {
+        setConnStatus(false, 'Error: ' + e.message);
+    });
+}
+
+// Channels
+function loadChannels() {
+    setStatus('Loading channels...');
+    fetch('/api/channels').then(r => r.json()).then(data => {
+        if (data.error) {
+            setStatus(data.error, 'error');
+            return;
+        }
+        state.channels = data.channels || [];
+        renderChannels();
+        setStatus('Connected', 'ok');
+    }).catch(e => {
+        setStatus('Error: ' + e.message, 'error');
+    });
+}
+
+function renderChannels() {
+    const list = document.getElementById('channelList');
+    const empty = document.getElementById('channelEmpty');
+    if (state.channels.length === 0) {
+        empty.style.display = '';
+        list.querySelectorAll('.channel-item').forEach(el => el.remove());
+        return;
+    }
+    empty.style.display = 'none';
+    list.querySelectorAll('.channel-item').forEach(el => el.remove());
+    state.channels.forEach(ch => {
+        const div = document.createElement('div');
+        div.className = 'channel-item' + (state.currentChannel === ch.name ? ' active' : '');
+        div.innerHTML = `
+            <div class="channel-avatar">${ch.name[0].toUpperCase()}</div>
+            <div class="channel-info">
+                <div class="channel-name">${escapeHtml(ch.name)}</div>
+                <div class="channel-meta">${ch.count} messages</div>
+            </div>
+        `;
+        div.onclick = () => selectChannel(ch.name);
+        list.appendChild(div);
+    });
+}
+
+function selectChannel(name) {
+    state.currentChannel = name;
+    state.messages = [];
+    state.hasMore = true;
+    renderChannels();
+    document.getElementById('mainHeader').style.display = 'flex';
+    document.getElementById('headerAvatar').textContent = name[0].toUpperCase();
+    document.getElementById('headerName').textContent = name;
+    document.getElementById('messageEmpty').style.display = 'none';
+    loadMessages();
+}
+
+// Messages
+function loadMessages(before) {
+    if (state.loading || !state.currentChannel) return;
+    state.loading = true;
+    let url = `/api/messages?channel=${encodeURIComponent(state.currentChannel)}&limit=20`;
+    if (before) url += `&before=${before}`;
+    setStatus('Loading messages...');
+    fetch(url).then(r => r.json()).then(data => {
+        state.loading = false;
+        if (data.error) {
+            setStatus(data.error, 'error');
+            return;
+        }
+        const msgs = data.messages || [];
+        if (msgs.length === 0) {
+            state.hasMore = false;
+        }
+        state.messages.push(...msgs);
+        renderMessages();
+        setStatus('Connected', 'ok');
+    }).catch(e => {
+        state.loading = false;
+        setStatus('Error: ' + e.message, 'error');
+    });
+}
+
+function renderMessages() {
+    const container = document.getElementById('messagesContainer');
+    container.innerHTML = '';
+    if (state.hasMore) {
+        const loading = document.createElement('div');
+        loading.className = 'loading-top';
+        loading.textContent = 'Scroll up to load older messages';
+        loading.id = 'loadingIndicator';
+        container.appendChild(loading);
+    }
+    const sorted = [...state.messages].sort((a, b) => a.id - b.id);
+    sorted.forEach(msg => {
+        const bubble = document.createElement('div');
+        bubble.className = 'message-bubble';
+        bubble.innerHTML = `
+            <div class="message-text">${escapeHtml(msg.text)}</div>
+            <div class="message-footer">
+                ${msg.views ? `<span class="message-views">${escapeHtml(msg.views)} views</span>` : ''}
+                <span class="message-date">${formatDate(msg.date)}</span>
+            </div>
+        `;
+        container.appendChild(bubble);
+    });
+    if (!state.messages.length || !sorted.length) return;
+    container.scrollTop = container.scrollHeight;
+}
+
+// Infinite scroll
+document.getElementById('messagesContainer').addEventListener('scroll', function() {
+    if (this.scrollTop < 50 && state.hasMore && !state.loading && state.messages.length > 0) {
+        const oldest = Math.min(...state.messages.map(m => m.id));
+        const prevHeight = this.scrollHeight;
+        loadMessages(oldest);
+        requestAnimationFrame(() => {
+            this.scrollTop = this.scrollHeight - prevHeight;
+        });
+    }
+});
+
+// Utilities
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+        const d = new Date(dateStr);
+        return d.toLocaleString();
+    } catch {
+        return dateStr;
+    }
+}
+
+// On load
+fetch('/api/settings').then(r => r.json()).then(data => {
+    if (data.configured) {
+        setStatus('Connected', 'ok');
+        loadChannels();
+    } else {
+        setStatus('Not configured - click settings', 'error');
+    }
+}).catch(() => {
+    setStatus('Cannot reach server', 'error');
+});
+</script>
+</body>
+</html>

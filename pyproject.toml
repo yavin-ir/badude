@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "badude"
+version = "0.1.0"
+description = "Telegram channel reader over DNS tunnel"
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+server = ["dnslib>=0.9.24", "cryptography>=41.0", "requests>=2.31", "beautifulsoup4>=4.12"]
+client = ["dnslib>=0.9.24", "cryptography>=41.0"]
