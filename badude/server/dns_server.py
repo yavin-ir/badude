@@ -111,7 +111,7 @@ class DNSServer:
             request = DNSRecord.parse(query_wire)
         except Exception:
             logger.debug("Failed to parse DNS query from %s", addr)
-            return dns_codec.build_dns_error_response(query_wire, rcode=1)
+            return None
 
         qname = str(request.q.qname).rstrip(".")
 
@@ -169,7 +169,8 @@ class DNSServer:
     def _serve_thread(self, query_wire: bytes, addr: tuple) -> None:
         try:
             response_wire = self._handle_query(query_wire, addr)
-            self._sock.sendto(response_wire, addr)
+            if response_wire is not None:
+                self._sock.sendto(response_wire, addr)
         except Exception:
             logger.exception("Error handling query from %s", addr)
 

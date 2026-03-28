@@ -452,8 +452,8 @@ body {
                 </div>
             </div>
             <div class="form-hint">
-                Route DNS queries through a resolver (e.g. 8.8.8.8) instead of connecting directly to the badude server.
-                Leave empty to send queries directly to the server address above.
+                Route DNS queries through a DNS resolver (e.g. 8.8.8.8) which forwards them to the server via the domain.
+                If set, the server address above is not needed. Leave empty to send queries directly to the server address.
             </div>
         </div>
 
@@ -527,8 +527,12 @@ function _getSettingsFromForm() {
 
 function saveSettings() {
     const settings = _getSettingsFromForm();
-    if (!settings.server || !settings.domain) {
-        setConnStatus(false, 'Server address and domain are required');
+    if (!settings.domain) {
+        setConnStatus(false, 'Domain is required');
+        return;
+    }
+    if (!settings.server && !settings.dns_resolver) {
+        setConnStatus(false, 'Either server address or DNS resolver is required');
         return;
     }
     setConnStatus(null, 'Saving...');
@@ -552,8 +556,12 @@ function saveSettings() {
 
 function testConnection() {
     const settings = _getSettingsFromForm();
-    if (!settings.server || !settings.domain) {
-        setConnStatus(false, 'Server address and domain are required');
+    if (!settings.domain) {
+        setConnStatus(false, 'Domain is required');
+        return;
+    }
+    if (!settings.server && !settings.dns_resolver) {
+        setConnStatus(false, 'Either server address or DNS resolver is required');
         return;
     }
     setConnStatus(null, 'Testing...');
