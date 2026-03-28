@@ -92,7 +92,11 @@ class DNSServer:
         if a == "p":
             return {"p": "ok"}
         elif a == "ch":
-            return {"channels": self.store.get_channels()}
+            from .scraper import get_channel_display_name
+            channels = self.store.get_channels()
+            for ch in channels:
+                ch["display"] = get_channel_display_name(ch["name"])
+            return {"channels": channels}
         elif a == "ms":
             channel = action.get("c", "")
             before = action.get("b")

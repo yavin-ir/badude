@@ -34,15 +34,16 @@ body {
 .channel-item:hover { background: #232e3c; }
 .channel-item.active { background: #2b5278; }
 .channel-avatar {
-    width: 42px; height: 42px; border-radius: 50%; background: #2b5278;
+    width: 42px; height: 42px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: 18px; font-weight: 600; flex-shrink: 0;
+    font-size: 18px; font-weight: 600; flex-shrink: 0; color: #fff;
 }
 .channel-info { flex: 1; min-width: 0; }
 .channel-name {
     font-size: 14px; font-weight: 500; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
 }
+.channel-display { font-size: 12px; color: #6ab3f3; margin-top: 1px; }
 .channel-meta { font-size: 12px; color: #8b9bab; margin-top: 2px; }
 .empty-state {
     display: flex; flex-direction: column; align-items: center;
@@ -55,16 +56,62 @@ body {
     padding: 12px 20px; background: #17212b; border-bottom: 1px solid #0e1621;
     display: none; align-items: center; gap: 12px;
 }
-.main-header .channel-name { font-size: 16px; }
-.messages-area { flex: 1; overflow-y: auto; padding: 12px 20px; display: flex; flex-direction: column; }
-.msg-loading { text-align: center; padding: 12px; color: #8b9bab; font-size: 13px; }
-.msg-bubble {
-    background: #182533; border-radius: 12px; padding: 10px 14px;
-    margin-bottom: 8px; max-width: 85%; word-wrap: break-word;
+.main-header .header-info { flex: 1; }
+.main-header .channel-name { font-size: 16px; font-weight: 600; }
+.main-header .channel-display { font-size: 12px; color: #8b9bab; }
+.messages-area {
+    flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column;
 }
-.msg-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
-.msg-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 4px; }
-.msg-views, .msg-date { font-size: 11px; color: #8b9bab; }
+.msg-loading { text-align: center; padding: 12px; color: #8b9bab; font-size: 13px; }
+
+.msg-bubble {
+    background: #182533; border-radius: 0 12px 12px 0; padding: 8px 14px 6px;
+    margin: 0 60px 2px 0; word-wrap: break-word;
+    border-left: 3px solid #2b5278; position: relative;
+}
+.msg-bubble + .msg-bubble { margin-top: 0; }
+.msg-bubble:last-child, .msg-bubble + .msg-loading { margin-bottom: 0; }
+.msg-gap { height: 10px; }
+.msg-author {
+    font-size: 13px; font-weight: 600; color: #6ab3f3; margin-bottom: 4px;
+}
+.msg-text {
+    font-size: 14px; line-height: 1.55; white-space: pre-wrap;
+}
+.msg-text a { color: #6ab3f3; text-decoration: none; }
+.msg-text a:hover { text-decoration: underline; }
+.msg-text b, .msg-text strong { font-weight: 600; }
+.msg-text i, .msg-text em { font-style: italic; }
+.msg-text code {
+    background: #1a2836; padding: 1px 5px; border-radius: 4px;
+    font-family: 'SF Mono', Consolas, monospace; font-size: 13px;
+}
+.msg-text pre {
+    background: #1a2836; padding: 10px 12px; border-radius: 6px;
+    margin: 6px 0; overflow-x: auto; font-family: 'SF Mono', Consolas, monospace; font-size: 13px;
+}
+.msg-text pre code { background: none; padding: 0; }
+.msg-footer {
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: 10px; margin-top: 4px; padding-top: 2px;
+}
+.msg-views {
+    font-size: 11px; color: #6b7b8b; display: flex; align-items: center; gap: 3px;
+}
+.msg-views svg { width: 14px; height: 14px; fill: #6b7b8b; }
+.msg-date { font-size: 11px; color: #6b7b8b; }
+.msg-divider {
+    text-align: center; padding: 12px 20px; color: #6b7b8b; font-size: 12px;
+    position: relative;
+}
+.msg-divider span {
+    background: #0e1621; padding: 0 12px; position: relative; z-index: 1;
+}
+.msg-divider::before {
+    content: ''; position: absolute; left: 40px; right: 40px; top: 50%;
+    border-top: 1px solid #1e2d3d;
+}
+
 .status-bar {
     padding: 4px 16px; font-size: 12px; color: #8b9bab;
     background: #17212b; border-top: 1px solid #0e1621; text-align: center;
@@ -141,7 +188,10 @@ body {
     <div class="main">
         <div class="main-header" id="mainHeader">
             <div class="channel-avatar" id="headerAvatar"></div>
-            <div class="channel-name" id="headerName"></div>
+            <div class="header-info">
+                <div class="channel-name" id="headerName"></div>
+                <div class="channel-display" id="headerDisplay"></div>
+            </div>
         </div>
         <div class="messages-area" id="msgArea">
             <div class="empty-state">Select a channel to view messages</div>
@@ -183,22 +233,48 @@ body {
 
 <script>
 (function() {
+    var SVG_EYE = '<svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
+    var AVATAR_COLORS = ['#e17076','#7bc862','#e5ca77','#65aadd','#a695e7','#ee7aae','#6ec9cb','#faa774'];
+
     // ---- DOM refs ----
-    const $ = id => document.getElementById(id);
-    const channelList = $('channelList');
-    const msgArea = $('msgArea');
-    const mainHeader = $('mainHeader');
-    const statusBar = $('statusBar');
+    var $ = function(id) { return document.getElementById(id); };
+    var channelList = $('channelList');
+    var msgArea = $('msgArea');
+    var mainHeader = $('mainHeader');
+    var statusBar = $('statusBar');
 
     // ---- State ----
-    let activeChannel = null;
-    let channelMessages = {}; // channel -> message array
-    let loadingChannel = null;
-    let canLoadMore = {};
+    var activeChannel = null;
+    var channelMessages = {};
+    var channelData = {};
+    var loadingChannel = null;
+    var canLoadMore = {};
 
     // ---- Helpers ----
-    function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-    function fmtDate(s) { if (!s) return ''; try { return new Date(s).toLocaleString(); } catch { return s; } }
+    function esc(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function avatarColor(name) { var h = 0; for (var i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0; return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]; }
+    function fmtDate(s) {
+        if (!s) return '';
+        try {
+            var d = new Date(s), now = new Date();
+            var diff = now - d;
+            if (diff < 60000) return 'just now';
+            if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+            if (diff < 86400000) return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            if (diff < 172800000) return 'Yesterday ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            return d.toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        } catch(e) { return s; }
+    }
+    function dateGroup(s) {
+        if (!s) return '';
+        try {
+            var d = new Date(s), now = new Date();
+            if (d.toDateString() === now.toDateString()) return 'Today';
+            var y = new Date(now); y.setDate(y.getDate()-1);
+            if (d.toDateString() === y.toDateString()) return 'Yesterday';
+            return d.toLocaleDateString([], {month:'long', day:'numeric', year:'numeric'});
+        } catch(e) { return ''; }
+    }
     function status(msg, cls) { statusBar.textContent = msg; statusBar.className = 'status-bar' + (cls ? ' ' + cls : ''); }
     function connStatus(ok, txt) {
         $('connDot').className = 'conn-dot ' + (ok === true ? 'ok' : ok === false ? 'err' : 'off');
@@ -206,16 +282,18 @@ body {
     }
 
     // ---- API ----
-    function api(path, opts) { return fetch(path, opts).then(r => r.json()); }
+    function api(path, opts) { return fetch(path, opts).then(function(r) { return r.json(); }); }
 
     // ---- Channels ----
     function refreshChannels() {
         status('Loading channels...');
-        api('/api/channels').then(data => {
+        api('/api/channels').then(function(data) {
             if (data.error) { status(data.error, 'error'); return; }
-            renderChannelList(data.channels || []);
+            var chs = data.channels || [];
+            chs.forEach(function(ch) { channelData[ch.name] = ch; });
+            renderChannelList(chs);
             status('Connected', 'ok');
-        }).catch(e => status('Error: ' + e.message, 'error'));
+        }).catch(function(e) { status('Error: ' + e.message, 'error'); });
     }
 
     function renderChannelList(channels) {
@@ -224,12 +302,14 @@ body {
             channelList.innerHTML = '<div class="empty-state">No channels loaded.<br>Configure settings and click refresh.</div>';
             return;
         }
-        channels.forEach(ch => {
-            const el = document.createElement('div');
+        channels.forEach(function(ch) {
+            var el = document.createElement('div');
             el.className = 'channel-item' + (activeChannel === ch.name ? ' active' : '');
-            el.innerHTML = '<div class="channel-avatar">' + esc(ch.name[0]).toUpperCase() + '</div>'
-                + '<div class="channel-info"><div class="channel-name">' + esc(ch.name) + '</div>'
-                + '<div class="channel-meta">' + ch.count + ' messages</div></div>';
+            var color = avatarColor(ch.name);
+            var display = ch.display && ch.display !== ch.name ? '<div class="channel-display">' + esc(ch.display) + '</div>' : '';
+            el.innerHTML = '<div class="channel-avatar" style="background:' + color + '">' + esc(ch.name[0]).toUpperCase() + '</div>'
+                + '<div class="channel-info"><div class="channel-name">' + esc(ch.display || ch.name) + '</div>'
+                + '<div class="channel-meta">@' + esc(ch.name) + ' &middot; ' + ch.count + ' msgs</div></div>';
             el.addEventListener('click', function() { openChannel(ch.name); });
             channelList.appendChild(el);
         });
@@ -241,15 +321,20 @@ body {
         channelMessages[name] = channelMessages[name] || [];
         canLoadMore[name] = true;
 
+        var ch = channelData[name] || {};
+        var color = avatarColor(name);
+
         // Update header
         mainHeader.style.display = 'flex';
         $('headerAvatar').textContent = name[0].toUpperCase();
-        $('headerName').textContent = name;
+        $('headerAvatar').style.background = color;
+        $('headerName').textContent = ch.display || name;
+        $('headerDisplay').textContent = '@' + name;
 
         // Highlight active in sidebar
-        channelList.querySelectorAll('.channel-item').forEach((el, i) => {
-            const n = el.querySelector('.channel-name');
-            el.classList.toggle('active', n && n.textContent === name);
+        channelList.querySelectorAll('.channel-item').forEach(function(el) {
+            var n = el.querySelector('.channel-meta');
+            el.classList.toggle('active', n && n.textContent.indexOf('@' + name) !== -1);
         });
 
         // Show cached messages immediately (if any), then fetch fresh
@@ -259,34 +344,32 @@ body {
 
     // ---- Fetch messages ----
     function fetchChannelMessages(channel, before) {
-        if (loadingChannel === channel) return; // already loading this channel
+        if (loadingChannel === channel) return;
         loadingChannel = channel;
 
-        let url = '/api/messages?channel=' + encodeURIComponent(channel) + '&limit=20';
+        var url = '/api/messages?channel=' + encodeURIComponent(channel) + '&limit=20';
         if (before) url += '&before=' + before;
 
         status('Loading ' + channel + '...');
-        api(url).then(data => {
+        api(url).then(function(data) {
             loadingChannel = null;
-            if (activeChannel !== channel) return; // user switched away
+            if (activeChannel !== channel) return;
 
             if (data.error) { status(data.error, 'error'); return; }
 
-            const msgs = data.messages || [];
+            var msgs = data.messages || [];
             if (msgs.length === 0) {
                 canLoadMore[channel] = false;
             }
 
-            // Merge into channel store
-            const existing = channelMessages[channel] || [];
-            const existingIds = new Set(existing.map(m => m.id));
-            const newMsgs = msgs.filter(m => !existingIds.has(m.id));
+            var existing = channelMessages[channel] || [];
+            var existingIds = {};
+            existing.forEach(function(m) { existingIds[m.id] = true; });
+            var newMsgs = msgs.filter(function(m) { return !existingIds[m.id]; });
 
             if (before) {
                 channelMessages[channel] = existing.concat(newMsgs);
             } else {
-                // Fresh load: if we had no messages, just use server response
-                // If we had cached ones, merge
                 if (existing.length === 0) {
                     channelMessages[channel] = msgs;
                 } else {
@@ -296,7 +379,7 @@ body {
 
             renderMsgs(channel, !before);
             status(channel + ': ' + channelMessages[channel].length + ' messages', 'ok');
-        }).catch(e => {
+        }).catch(function(e) {
             loadingChannel = null;
             if (activeChannel !== channel) return;
             status('Error: ' + e.message, 'error');
@@ -306,24 +389,56 @@ body {
     // ---- Render messages ----
     function renderMsgs(channel, scrollBottom) {
         if (activeChannel !== channel) return;
-        const msgs = channelMessages[channel] || [];
+        var msgs = channelMessages[channel] || [];
+        var ch = channelData[channel] || {};
+        var authorName = ch.display || channel;
         msgArea.innerHTML = '';
 
         if (canLoadMore[channel]) {
-            const hint = document.createElement('div');
+            var hint = document.createElement('div');
             hint.className = 'msg-loading';
             hint.textContent = msgs.length ? 'Scroll up for older messages' : 'Loading...';
             msgArea.appendChild(hint);
         }
 
-        const sorted = msgs.slice().sort((a, b) => a.id - b.id);
-        sorted.forEach(msg => {
-            const el = document.createElement('div');
+        var sorted = msgs.slice().sort(function(a, b) { return a.id - b.id; });
+        var lastDateGroup = '';
+
+        sorted.forEach(function(msg) {
+            // Date dividers
+            var dg = dateGroup(msg.date);
+            if (dg && dg !== lastDateGroup) {
+                lastDateGroup = dg;
+                var divider = document.createElement('div');
+                divider.className = 'msg-divider';
+                divider.innerHTML = '<span>' + esc(dg) + '</span>';
+                msgArea.appendChild(divider);
+            }
+
+            var el = document.createElement('div');
             el.className = 'msg-bubble';
-            el.innerHTML = '<div class="msg-text">' + esc(msg.text) + '</div>'
-                + '<div class="msg-footer">'
-                + (msg.views ? '<span class="msg-views">' + esc(msg.views) + ' views</span>' : '')
-                + '<span class="msg-date">' + fmtDate(msg.date) + '</span></div>';
+
+            var content = '';
+            // Author
+            var author = msg.author || authorName;
+            content += '<div class="msg-author">' + esc(author) + '</div>';
+
+            // Message body: use HTML if available, else escaped text
+            if (msg.html) {
+                content += '<div class="msg-text">' + msg.html + '</div>';
+            } else {
+                content += '<div class="msg-text">' + esc(msg.text) + '</div>';
+            }
+
+            // Footer
+            content += '<div class="msg-footer">';
+            if (msg.views) {
+                content += '<span class="msg-views">' + SVG_EYE + ' ' + esc(msg.views) + '</span>';
+            }
+            content += '<span class="msg-date">' + fmtDate(msg.date) + '</span>';
+            content += '</div>';
+
+            el.innerHTML = content;
             msgArea.appendChild(el);
         });
 
@@ -336,20 +451,20 @@ body {
     msgArea.addEventListener('scroll', function() {
         if (!activeChannel || !canLoadMore[activeChannel]) return;
         if (loadingChannel) return;
-        const msgs = channelMessages[activeChannel] || [];
+        var msgs = channelMessages[activeChannel] || [];
         if (msgs.length === 0) return;
         if (this.scrollTop < 50) {
-            const oldest = Math.min(...msgs.map(m => m.id));
-            const prevH = this.scrollHeight;
+            var oldest = Math.min.apply(null, msgs.map(function(m) { return m.id; }));
+            var prevH = this.scrollHeight;
             fetchChannelMessages(activeChannel, oldest);
-            // Restore scroll after render
-            requestAnimationFrame(() => { this.scrollTop = this.scrollHeight - prevH; });
+            var self = this;
+            requestAnimationFrame(function() { self.scrollTop = self.scrollHeight - prevH; });
         }
     });
 
     // ---- Settings ----
     function openSettings() {
-        api('/api/settings').then(data => {
+        api('/api/settings').then(function(data) {
             if (data.configured) {
                 $('settServer').value = data.server || '';
                 $('settPort').value = data.port || 5553;
@@ -361,7 +476,7 @@ body {
             } else {
                 connStatus(null, 'Not configured');
             }
-        }).catch(() => connStatus(false, 'Cannot reach local server'));
+        }).catch(function() { connStatus(false, 'Cannot reach local server'); });
         $('settingsModal').classList.add('open');
     }
 
@@ -379,19 +494,19 @@ body {
     }
 
     function saveSettings() {
-        const s = getFormSettings();
+        var s = getFormSettings();
         if (!s.domain) { connStatus(false, 'Domain is required'); return; }
         if (!s.server && !s.dns_resolver) { connStatus(false, 'Server address or DNS resolver required'); return; }
         connStatus(null, 'Saving...');
         api('/api/settings', {
             method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(s),
-        }).then(data => {
+        }).then(function(data) {
             if (data.ok) {
                 connStatus(true, 'Settings saved');
                 status('Settings saved', 'ok');
                 closeSettings();
-                // Clear cached messages since server/key may have changed
                 channelMessages = {};
+                channelData = {};
                 canLoadMore = {};
                 activeChannel = null;
                 mainHeader.style.display = 'none';
@@ -400,25 +515,25 @@ body {
             } else {
                 connStatus(false, data.error || 'Failed to save');
             }
-        }).catch(e => connStatus(false, 'Error: ' + e.message));
+        }).catch(function(e) { connStatus(false, 'Error: ' + e.message); });
     }
 
     function testConnection() {
-        const s = getFormSettings();
+        var s = getFormSettings();
         if (!s.domain) { connStatus(false, 'Domain is required'); return; }
         if (!s.server && !s.dns_resolver) { connStatus(false, 'Server address or DNS resolver required'); return; }
         connStatus(null, 'Testing...');
         api('/api/settings', {
             method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(s),
-        }).then(data => {
+        }).then(function(data) {
             if (!data.ok) { connStatus(false, 'Failed to apply settings'); return; }
             return api('/api/ping');
-        }).then(data => {
+        }).then(function(data) {
             if (!data) return;
             if (data.error) { connStatus(false, 'Failed: ' + data.error); }
             else if (data.p === 'ok') { connStatus(true, 'Connected to server'); }
             else { connStatus(false, 'Unexpected response'); }
-        }).catch(e => connStatus(false, 'Error: ' + e.message));
+        }).catch(function(e) { connStatus(false, 'Error: ' + e.message); });
     }
 
     // ---- Event listeners ----
@@ -429,10 +544,10 @@ body {
     $('btnCancel').addEventListener('click', closeSettings);
 
     // ---- Init ----
-    api('/api/settings').then(data => {
+    api('/api/settings').then(function(data) {
         if (data.configured) { status('Connected', 'ok'); refreshChannels(); }
         else { status('Not configured - click settings', 'error'); }
-    }).catch(() => status('Cannot reach server', 'error'));
+    }).catch(function() { status('Cannot reach server', 'error'); });
 })();
 </script>
 </body>

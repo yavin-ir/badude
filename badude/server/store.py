@@ -13,6 +13,8 @@ class Message:
     text: str
     date: str
     views: str = ""
+    author: str = ""
+    html: str = ""
     scraped_at: float = field(default_factory=time.time)
 
 
@@ -50,6 +52,13 @@ class MessageStore:
             CREATE INDEX IF NOT EXISTS idx_messages_channel_msgid
             ON messages (channel, msg_id DESC)
         """)
+        # Add new columns if missing (migration for existing databases)
+        for col, coltype in [("author", "TEXT NOT NULL DEFAULT ''"),
+                             ("html", "TEXT NOT NULL DEFAULT ''")]:
+            try:
+                conn.execute(f"ALTER TABLE messages ADD COLUMN {col} {coltype}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
         conn.commit()
 
     def insert_new_messages(self, channel: str, messages: list[Message]) -> int:
@@ -57,11 +66,12 @@ class MessageStore:
         conn = self._get_conn()
         cursor = conn.executemany(
             """
-            INSERT OR IGNORE INTO messages (channel, msg_id, text, date, views, scraped_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO messages (channel, msg_id, text, date, views, author, html, scraped_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                (msg.channel, msg.msg_id, msg.text, msg.date, msg.views, msg.scraped_at)
+                (msg.channel, msg.msg_id, msg.text, msg.date, msg.views,
+                 msg.author, msg.html, msg.scraped_at)
                 for msg in messages
             ],
         )
@@ -90,13 +100,13 @@ class MessageStore:
         conn = self._get_conn()
         if before is not None:
             rows = conn.execute(
-                "SELECT msg_id, channel, text, date, views FROM messages "
+                "SELECT msg_id, channel, text, date, views, author, html FROM messages "
                 "WHERE channel = ? AND msg_id < ? ORDER BY msg_id DESC LIMIT ?",
                 (channel, before, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT msg_id, channel, text, date, views FROM messages "
+                "SELECT msg_id, channel, text, date, views, author, html FROM messages "
                 "WHERE channel = ? ORDER BY msg_id DESC LIMIT ?",
                 (channel, limit),
             ).fetchall()
@@ -107,6 +117,8 @@ class MessageStore:
                 "text": row["text"],
                 "date": row["date"],
                 "views": row["views"],
+                "author": row["author"],
+                "html": row["html"],
             }
             for row in rows
         ]
