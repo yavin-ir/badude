@@ -42,10 +42,11 @@ def decode_query_name(qname: str, domain: str) -> bytes:
     """Decode a DNS query name back to payload bytes.
 
     Strips the domain suffix, joins remaining labels, base32 decodes.
+    Case-insensitive domain matching (DNS is case-insensitive).
     """
     qname = qname.rstrip(".")
     domain = domain.rstrip(".")
-    if not qname.endswith("." + domain):
+    if not qname.lower().endswith("." + domain.lower()):
         raise ValueError(f"query name {qname!r} does not end with domain {domain!r}")
     prefix = qname[: -(len(domain) + 1)]
     encoded = prefix.replace(".", "")
@@ -65,7 +66,7 @@ def is_poll_query(qname: str, domain: str) -> tuple[bytes, int] | None:
     """Check if a query name is a poll query. Returns (req_id, chunk_idx) or None."""
     qname = qname.rstrip(".")
     domain = domain.rstrip(".")
-    if not qname.endswith("." + domain):
+    if not qname.lower().endswith("." + domain.lower()):
         return None
     prefix = qname[: -(len(domain) + 1)]
     # Poll queries have no dots in prefix and start with 'p'

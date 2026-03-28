@@ -89,7 +89,9 @@ class DNSServer:
     def _handle_action(self, action: dict) -> dict:
         """Dispatch an action request and return the response dict."""
         a = action.get("a")
-        if a == "ch":
+        if a == "p":
+            return {"p": "ok"}
+        elif a == "ch":
             return {"channels": self.store.get_channels()}
         elif a == "ms":
             channel = action.get("c", "")
@@ -110,10 +112,11 @@ class DNSServer:
         try:
             request = DNSRecord.parse(query_wire)
         except Exception:
-            logger.debug("Failed to parse DNS query from %s", addr)
+            logger.warning("[%s] Failed to parse DNS query", addr[0])
             return None
 
         qname = str(request.q.qname).rstrip(".")
+        logger.info("[%s] Query: %s", addr[0], qname)
 
         # Check if it's a poll query
         poll = dns_codec.is_poll_query(qname, self.domain)
@@ -121,18 +124,21 @@ class DNSServer:
             req_id, chunk_idx = poll
             chunk = self.chunk_cache.get(req_id, chunk_idx)
             if chunk is not None:
+                logger.info("[%s] Poll chunk %d for %s", addr[0], chunk_idx, req_id.hex())
                 return dns_codec.build_dns_response(query_wire, chunk)
             else:
+                logger.warning("[%s] Poll miss chunk %d for %s", addr[0], chunk_idx, req_id.hex())
                 return dns_codec.build_dns_error_response(query_wire)
 
         # Regular data query - decode payload
         try:
             payload = dns_codec.decode_query_name(qname, self.domain)
         except (ValueError, Exception) as e:
-            logger.debug("Failed to decode query name %s: %s", qname, e)
+            logger.warning("[%s] Decode failed: %s", addr[0], e)
             return dns_codec.build_dns_error_response(query_wire)
 
         if len(payload) < protocol.REQ_ID_LEN:
+            logger.warning("[%s] Payload too short (%d bytes)", addr[0], len(payload))
             return dns_codec.build_dns_error_response(query_wire)
 
         req_id = payload[: protocol.REQ_ID_LEN]
@@ -142,15 +148,17 @@ class DNSServer:
         try:
             plaintext = protocol.decrypt(self.key, encrypted_data)
         except Exception as e:
-            logger.debug("Decryption failed: %s", e)
+            logger.warning("[%s] Decryption failed: %s", addr[0], e)
             return dns_codec.build_dns_error_response(query_wire)
 
         # Parse JSON action
         try:
             action = json.loads(plaintext)
         except json.JSONDecodeError as e:
-            logger.debug("Invalid JSON: %s", e)
+            logger.warning("[%s] Invalid JSON: %s", addr[0], e)
             return dns_codec.build_dns_error_response(query_wire)
+
+        logger.info("[%s] Action: %s → %d bytes response", addr[0], action, len(plaintext))
 
         # Handle action
         response_data = self._handle_action(action)
@@ -158,6 +166,7 @@ class DNSServer:
 
         # Chunk the response
         chunks = _chunk_response(req_id, self.key, response_json)
+        logger.info("[%s] Response: %d bytes, %d chunk(s)", addr[0], len(response_json), len(chunks))
 
         # Cache all chunks for polling
         if len(chunks) > 1:

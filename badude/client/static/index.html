@@ -412,11 +412,12 @@ body {
             method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(s),
         }).then(data => {
             if (!data.ok) { connStatus(false, 'Failed to apply settings'); return; }
-            return api('/api/channels');
+            return api('/api/ping');
         }).then(data => {
             if (!data) return;
             if (data.error) { connStatus(false, 'Failed: ' + data.error); }
-            else { const c = (data.channels||[]).length; connStatus(true, 'OK (' + c + ' channel' + (c!==1?'s':'') + ')'); }
+            else if (data.p === 'ok') { connStatus(true, 'Connected to server'); }
+            else { connStatus(false, 'Unexpected response'); }
         }).catch(e => connStatus(false, 'Error: ' + e.message));
     }
 

@@ -88,6 +88,15 @@ class WebHandler(BaseHTTPRequestHandler):
             self._send_file(
                 os.path.join(_static_dir(), "index.html"), "text/html; charset=utf-8"
             )
+        elif path == "/api/ping":
+            if self.dns_client is None:
+                self._send_json({"error": "not configured"}, 503)
+                return
+            result = self.dns_client.request({"a": "p"})
+            if result is None:
+                self._send_json({"error": "dns request failed"}, 502)
+            else:
+                self._send_json(result)
         elif path == "/api/channels":
             if self.dns_client is None:
                 self._send_json({"error": "not configured"}, 503)
