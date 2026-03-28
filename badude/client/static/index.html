@@ -635,11 +635,15 @@ function selectChannel(name) {
     state.currentChannel = name;
     state.messages = [];
     state.hasMore = true;
+    state.loading = false;
+    state.loadId = (state.loadId || 0) + 1; // cancel any in-flight requests
     renderChannels();
     document.getElementById('mainHeader').style.display = 'flex';
     document.getElementById('headerAvatar').textContent = name[0].toUpperCase();
     document.getElementById('headerName').textContent = name;
     document.getElementById('messageEmpty').style.display = 'none';
+    // Clear message area immediately
+    document.getElementById('messagesContainer').innerHTML = '';
     loadMessages();
 }
 
@@ -647,10 +651,16 @@ function selectChannel(name) {
 function loadMessages(before) {
     if (state.loading || !state.currentChannel) return;
     state.loading = true;
-    let url = `/api/messages?channel=${encodeURIComponent(state.currentChannel)}&limit=20`;
+    const requestChannel = state.currentChannel;
+    const requestLoadId = state.loadId || 0;
+    let url = `/api/messages?channel=${encodeURIComponent(requestChannel)}&limit=20`;
     if (before) url += `&before=${before}`;
     setStatus('Loading messages...');
     fetch(url).then(r => r.json()).then(data => {
+        // Discard if user switched channels while request was in flight
+        if (state.currentChannel !== requestChannel || (state.loadId || 0) !== requestLoadId) {
+            return;
+        }
         state.loading = false;
         if (data.error) {
             setStatus(data.error, 'error');
@@ -660,10 +670,14 @@ function loadMessages(before) {
         if (msgs.length === 0) {
             state.hasMore = false;
         }
-        state.messages.push(...msgs);
+        // Deduplicate by message id
+        const existingIds = new Set(state.messages.map(m => m.id));
+        const newMsgs = msgs.filter(m => !existingIds.has(m.id));
+        state.messages.push(...newMsgs);
         renderMessages();
         setStatus('Connected', 'ok');
     }).catch(e => {
+        if (state.currentChannel !== requestChannel) return;
         state.loading = false;
         setStatus('Error: ' + e.message, 'error');
     });

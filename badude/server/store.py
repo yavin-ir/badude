@@ -52,17 +52,13 @@ class MessageStore:
         """)
         conn.commit()
 
-    def upsert_messages(self, channel: str, messages: list[Message]) -> None:
+    def insert_new_messages(self, channel: str, messages: list[Message]) -> int:
+        """Insert only messages that don't already exist. Returns count of new messages."""
         conn = self._get_conn()
-        conn.executemany(
+        cursor = conn.executemany(
             """
-            INSERT INTO messages (channel, msg_id, text, date, views, scraped_at)
+            INSERT OR IGNORE INTO messages (channel, msg_id, text, date, views, scraped_at)
             VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(channel, msg_id) DO UPDATE SET
-                text=excluded.text,
-                date=excluded.date,
-                views=excluded.views,
-                scraped_at=excluded.scraped_at
             """,
             [
                 (msg.channel, msg.msg_id, msg.text, msg.date, msg.views, msg.scraped_at)
@@ -70,6 +66,16 @@ class MessageStore:
             ],
         )
         conn.commit()
+        return cursor.rowcount
+
+    def get_max_msg_id(self, channel: str) -> int | None:
+        """Get the highest msg_id stored for a channel, or None if empty."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT MAX(msg_id) as max_id FROM messages WHERE channel = ?",
+            (channel,),
+        ).fetchone()
+        return row["max_id"] if row and row["max_id"] is not None else None
 
     def get_channels(self) -> list[dict]:
         conn = self._get_conn()

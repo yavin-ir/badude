@@ -31,16 +31,20 @@ DEFAULT_CONFIG = {
 
 
 def _scraper_loop(store: MessageStore, channel: str, interval: int) -> None:
-    """Periodically scrape a Telegram channel."""
+    """Periodically scrape a Telegram channel, only storing new messages."""
     logger.info("Starting scraper for channel: %s (interval: %ds)", channel, interval)
     while True:
         try:
             messages = fetch_latest(channel)
             if messages:
-                store.upsert_messages(channel, messages)
-                logger.info(
-                    "Scraped %d messages from %s", len(messages), channel
-                )
+                new_count = store.insert_new_messages(channel, messages)
+                if new_count > 0:
+                    logger.info(
+                        "Stored %d new messages from %s (%d total scraped)",
+                        new_count, channel, len(messages),
+                    )
+                else:
+                    logger.debug("No new messages from %s", channel)
             else:
                 logger.warning("No messages scraped from %s", channel)
         except Exception:
