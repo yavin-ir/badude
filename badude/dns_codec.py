@@ -69,8 +69,8 @@ def is_poll_query(qname: str, domain: str) -> tuple[bytes, int] | None:
     if not qname.lower().endswith("." + domain.lower()):
         return None
     prefix = qname[: -(len(domain) + 1)]
-    # Poll queries have no dots in prefix and start with 'p'
-    if "." in prefix or not prefix.startswith("p"):
+    # Poll queries have no dots in prefix and start with 'p' (case-insensitive for 0x20)
+    if "." in prefix or not prefix.lower().startswith("p"):
         return None
     hex_part = prefix[1:]
     if len(hex_part) != protocol.REQ_ID_LEN * 2 + 2:

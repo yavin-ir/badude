@@ -30,7 +30,8 @@ class DNSTunnelClient:
         self.key = protocol.derive_key(secret)
         self.dns_resolver = dns_resolver.strip()
         self.dns_resolver_port = dns_resolver_port
-        self.timeout = timeout
+        # Longer timeout when going through a resolver (extra hops)
+        self.timeout = timeout if not self.dns_resolver else max(timeout, 10)
 
     @property
     def _target(self) -> tuple[str, int]:

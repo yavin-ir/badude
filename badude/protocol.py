@@ -9,11 +9,11 @@ NONCE_LEN = 12
 TAG_LEN = 16
 REQ_ID_LEN = 4
 CHUNK_HEADER_LEN = 2  # chunk_count(1) + chunk_index(1)
-MAX_TXT_RDATA = 900  # conservative limit for TXT record data
+MAX_TXT_RDATA = 3000  # fits within EDNS0 4096-byte UDP buffer
 MAX_LABEL_LEN = 63
 MAX_NAME_LEN = 253
 RESPONSE_TTL = 0
-CHUNK_CACHE_TTL = 30
+CHUNK_CACHE_TTL = 120  # longer TTL for slow resolver round-trips
 
 
 def derive_key(secret: str) -> bytes:
