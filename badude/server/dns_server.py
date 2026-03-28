@@ -137,12 +137,13 @@ class DNSServer:
             logger.warning("[%s] Decode failed: %s", addr[0], e)
             return dns_codec.build_dns_error_response(query_wire)
 
-        if len(payload) < protocol.REQ_ID_LEN:
+        if len(payload) < protocol.NONCE_LEN + protocol.TAG_LEN:
             logger.warning("[%s] Payload too short (%d bytes)", addr[0], len(payload))
             return dns_codec.build_dns_error_response(query_wire)
 
+        # req_id = first 4 bytes of nonce (no separate prefix)
         req_id = payload[: protocol.REQ_ID_LEN]
-        encrypted_data = payload[protocol.REQ_ID_LEN :]
+        encrypted_data = payload
 
         # Decrypt request
         try:

@@ -40,5 +40,9 @@ def decrypt(key: bytes, data: bytes) -> bytes:
 
 
 def generate_request_id() -> bytes:
-    """Generate a random 4-byte request ID."""
+    """Generate a random 4-byte request ID.
+
+    Note: in practice, req_id is derived from nonce[:4] of the encrypted
+    payload, so this is only used for backward compatibility or testing.
+    """
     return os.urandom(REQ_ID_LEN)

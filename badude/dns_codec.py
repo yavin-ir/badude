@@ -2,7 +2,7 @@
 
 import base64
 
-from dnslib import DNSRecord, DNSHeader, DNSQuestion, QTYPE, RR, TXT
+from dnslib import DNSRecord, DNSHeader, DNSQuestion, QTYPE, RR, TXT, EDNS0
 
 from . import protocol
 
@@ -89,6 +89,8 @@ def build_dns_query(qname: str) -> bytes:
         DNSHeader(rd=1),
         q=DNSQuestion(qname, QTYPE.TXT),
     )
+    # EDNS0: advertise 4096-byte UDP buffer so resolvers don't truncate responses
+    q.add_ar(EDNS0(udp_len=4096))
     return q.pack()
 
 

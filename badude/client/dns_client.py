@@ -69,11 +69,10 @@ class DNSTunnelClient:
           {"a": "ch"}                           - list channels
           {"a": "ms", "c": "durov", "l": 10}    - get messages
         """
-        # Serialize and encrypt
+        # Serialize and encrypt (req_id is derived from nonce, first 4 bytes)
         plaintext = json.dumps(action, separators=(",", ":")).encode("utf-8")
-        req_id = protocol.generate_request_id()
         encrypted = protocol.encrypt(self.key, plaintext)
-        payload = req_id + encrypted
+        payload = encrypted
 
         # Encode as DNS query
         qname = dns_codec.encode_query_name(payload, self.domain)
