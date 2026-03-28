@@ -92,36 +92,39 @@ class MessageStore:
         rows = conn.execute(
             "SELECT channel, COUNT(*) as count FROM messages GROUP BY channel ORDER BY channel"
         ).fetchall()
-        return [{"name": row["channel"], "count": row["count"]} for row in rows]
+        return [{"n": row["channel"], "c": row["count"]} for row in rows]
 
     def get_messages(
-        self, channel: str, before: int | None = None, limit: int = 20
+        self, channel: str, before: int | None = None, limit: int = 10
     ) -> list[dict]:
+        """Get messages with compact keys to minimize DNS payload.
+
+        Keys: i=id, t=text(html preferred), d=date, v=views, a=author
+        """
         conn = self._get_conn()
         if before is not None:
             rows = conn.execute(
-                "SELECT msg_id, channel, text, date, views, author, html FROM messages "
+                "SELECT msg_id, text, date, views, author, html FROM messages "
                 "WHERE channel = ? AND msg_id < ? ORDER BY msg_id DESC LIMIT ?",
                 (channel, before, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT msg_id, channel, text, date, views, author, html FROM messages "
+                "SELECT msg_id, text, date, views, author, html FROM messages "
                 "WHERE channel = ? ORDER BY msg_id DESC LIMIT ?",
                 (channel, limit),
             ).fetchall()
-        return [
-            {
-                "id": row["msg_id"],
-                "channel": row["channel"],
-                "text": row["text"],
-                "date": row["date"],
-                "views": row["views"],
-                "author": row["author"],
-                "html": row["html"],
-            }
-            for row in rows
-        ]
+        result = []
+        for row in rows:
+            msg = {"i": row["msg_id"], "t": row["html"] or row["text"]}
+            if row["date"]:
+                msg["d"] = row["date"]
+            if row["views"]:
+                msg["v"] = row["views"]
+            if row["author"]:
+                msg["a"] = row["author"]
+            result.append(msg)
+        return result
 
     def cleanup_expired(self) -> int:
         conn = self._get_conn()

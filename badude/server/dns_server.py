@@ -95,17 +95,17 @@ class DNSServer:
             from .scraper import get_channel_display_name
             channels = self.store.get_channels()
             for ch in channels:
-                ch["display"] = get_channel_display_name(ch["name"])
-            return {"channels": channels}
+                ch["d"] = get_channel_display_name(ch["n"])
+            return {"ch": channels}
         elif a == "ms":
             channel = action.get("c", "")
             before = action.get("b")
-            limit = action.get("l", 20)
+            limit = action.get("l", 10)
             if before is not None:
                 before = int(before)
             limit = min(int(limit), 50)
             messages = self.store.get_messages(channel, before, limit)
-            return {"messages": messages}
+            return {"ms": messages}
         else:
             return {"error": "unknown action"}
 

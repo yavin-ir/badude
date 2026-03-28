@@ -104,8 +104,14 @@ class WebHandler(BaseHTTPRequestHandler):
             result = self.dns_client.request({"a": "ch"})
             if result is None:
                 self._send_json({"error": "dns request failed"}, 502)
-            else:
-                self._send_json(result)
+                return
+            # Expand compact keys from server for the UI
+            channels = [
+                {"name": ch.get("n", ""), "count": ch.get("c", 0),
+                 "display": ch.get("d", ch.get("n", ""))}
+                for ch in result.get("ch", [])
+            ]
+            self._send_json({"channels": channels})
         elif path == "/api/messages":
             if self.dns_client is None:
                 self._send_json({"error": "not configured"}, 503)
@@ -125,8 +131,15 @@ class WebHandler(BaseHTTPRequestHandler):
             result = self.dns_client.request(action)
             if result is None:
                 self._send_json({"error": "dns request failed"}, 502)
-            else:
-                self._send_json(result)
+                return
+            # Expand compact keys from server for the UI
+            messages = [
+                {"id": m.get("i"), "html": m.get("t", ""),
+                 "date": m.get("d", ""), "views": m.get("v", ""),
+                 "author": m.get("a", "")}
+                for m in result.get("ms", [])
+            ]
+            self._send_json({"messages": messages})
         elif path == "/api/settings":
             if self.dns_client:
                 self._send_json({

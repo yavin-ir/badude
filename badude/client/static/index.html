@@ -347,7 +347,7 @@ body {
         if (loadingChannel === channel) return;
         loadingChannel = channel;
 
-        var url = '/api/messages?channel=' + encodeURIComponent(channel) + '&limit=20';
+        var url = '/api/messages?channel=' + encodeURIComponent(channel) + '&limit=10';
         if (before) url += '&before=' + before;
 
         status('Loading ' + channel + '...');
