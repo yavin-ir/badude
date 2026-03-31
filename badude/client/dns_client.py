@@ -11,8 +11,8 @@ from .. import protocol, dns_codec
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-DEFAULT_TIMEOUT = 10
-RESOLVER_TIMEOUT = 15
+DEFAULT_TIMEOUT = 30
+RESOLVER_TIMEOUT = 30
 MAX_RETRIES = 2
 REQUEST_ATTEMPTS = 3  # retry entire request with fresh nonce
 
@@ -138,7 +138,7 @@ class DNSTunnelClient:
         if chunk_count > 1:
             for idx in range(1, chunk_count):
                 # Small delay between poll queries to avoid detection
-                time.sleep(0.5)
+                time.sleep(1.0)
                 poll_qname = dns_codec.encode_poll_query_name(
                     resp_req_id, idx, self.domain
                 )
