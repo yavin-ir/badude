@@ -5,9 +5,12 @@ import logging
 import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from .. import protocol, dns_codec
 from .store import MessageStore
+
+MAX_WORKERS = 64
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +88,7 @@ class DNSServer:
         self.chunk_cache = ChunkCache()
         self._sock: socket.socket | None = None
         self._running = False
+        self._pool = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 
     def _handle_action(self, action: dict) -> dict:
         """Dispatch an action request and return the response dict."""
@@ -212,14 +216,12 @@ class DNSServer:
                     data, addr = self._sock.recvfrom(4096)
                 except OSError:
                     break
-                thread = threading.Thread(
-                    target=self._serve_thread, args=(data, addr), daemon=True
-                )
-                thread.start()
+                self._pool.submit(self._serve_thread, data, addr)
         except KeyboardInterrupt:
             pass
         finally:
             self._running = False
+            self._pool.shutdown(wait=False)
             self._sock.close()
             logger.info("DNS server stopped")
 

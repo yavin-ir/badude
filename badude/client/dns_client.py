@@ -3,13 +3,15 @@
 import json
 import logging
 import socket
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .. import protocol, dns_codec
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 5
-MAX_RETRIES = 3
+RESOLVER_TIMEOUT = 8
+MAX_RETRIES = 2
 REQUEST_ATTEMPTS = 3  # retry entire request with fresh nonce
 
 
@@ -32,7 +34,7 @@ class DNSTunnelClient:
         self.dns_resolver = dns_resolver.strip()
         self.dns_resolver_port = dns_resolver_port
         # Longer timeout when going through a resolver (extra hops)
-        self.timeout = timeout if not self.dns_resolver else max(timeout, 10)
+        self.timeout = timeout if not self.dns_resolver else max(timeout, RESOLVER_TIMEOUT)
 
     @property
     def _target(self) -> tuple[str, int]:
@@ -128,29 +130,34 @@ class DNSTunnelClient:
         # Collect all chunks
         all_chunks = {chunk_index: chunk_data}
 
-        # Poll for remaining chunks if needed
+        # Poll for remaining chunks in parallel
         if chunk_count > 1:
-            for idx in range(chunk_count):
-                if idx in all_chunks:
-                    continue
+            missing = [idx for idx in range(chunk_count) if idx not in all_chunks]
+
+            def _fetch_chunk(idx):
                 poll_qname = dns_codec.encode_poll_query_name(
                     resp_req_id, idx, self.domain
                 )
                 poll_wire = dns_codec.build_dns_query(poll_qname)
                 poll_resp = self._send_recv_validated(poll_wire)
                 if poll_resp is None:
-                    logger.warning("Failed to poll chunk %d/%d", idx, chunk_count)
-                    return None
+                    return idx, None
                 poll_parts = dns_codec.parse_dns_response(poll_resp)
                 if not poll_parts:
-                    logger.warning("No TXT in poll response for chunk %d", idx)
-                    return None
+                    return idx, None
                 poll_chunk = poll_parts[0]
                 if len(poll_chunk) < protocol.CHUNK_HEADER_LEN + protocol.REQ_ID_LEN:
-                    logger.warning("Poll chunk %d too short", idx)
-                    return None
-                p_data = poll_chunk[2 + protocol.REQ_ID_LEN :]
-                all_chunks[idx] = p_data
+                    return idx, None
+                return idx, poll_chunk[2 + protocol.REQ_ID_LEN :]
+
+            with ThreadPoolExecutor(max_workers=len(missing)) as pool:
+                futures = {pool.submit(_fetch_chunk, idx): idx for idx in missing}
+                for future in as_completed(futures):
+                    idx, data = future.result()
+                    if data is None:
+                        logger.warning("Failed to poll chunk %d/%d", idx, chunk_count)
+                        return None
+                    all_chunks[idx] = data
 
         # Reassemble encrypted data
         encrypted_data = b""
