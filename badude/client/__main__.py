@@ -8,7 +8,7 @@ from .dns_client import DNSTunnelClient
 from .web import run_server, DEFAULT_SETTINGS_PATH
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)

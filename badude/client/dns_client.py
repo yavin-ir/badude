@@ -8,9 +8,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .. import protocol, dns_codec
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-DEFAULT_TIMEOUT = 5
-RESOLVER_TIMEOUT = 8
+DEFAULT_TIMEOUT = 10
+RESOLVER_TIMEOUT = 15
 MAX_RETRIES = 2
 REQUEST_ATTEMPTS = 3  # retry entire request with fresh nonce
 
@@ -47,9 +48,11 @@ class DNSTunnelClient:
         """Send a DNS query and receive the response via UDP."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(self.timeout)
+        logger.debug("Sending DNS query to %s (timeout=%s)", self._target, self.timeout)
         try:
             sock.sendto(query_wire, self._target)
             data, _ = sock.recvfrom(65535)
+            logger.debug("Received DNS response: %d bytes", len(data))
             return data
         finally:
             sock.close()

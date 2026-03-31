@@ -11,6 +11,7 @@ from urllib.parse import urlparse, parse_qs
 from .dns_client import DNSTunnelClient
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 DEFAULT_SETTINGS_PATH = os.path.join(
     os.path.expanduser("~"), ".badude", "settings.json"
