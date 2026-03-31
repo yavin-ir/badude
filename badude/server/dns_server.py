@@ -13,6 +13,7 @@ from .store import MessageStore
 MAX_WORKERS = 64
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class ChunkCache:
@@ -214,6 +215,7 @@ class DNSServer:
             while self._running:
                 try:
                     data, addr = self._sock.recvfrom(4096)
+                    logger.debug("[%s] Received %d bytes", addr[0], len(data))
                 except OSError:
                     break
                 self._pool.submit(self._serve_thread, data, addr)
