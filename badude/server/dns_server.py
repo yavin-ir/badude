@@ -105,7 +105,7 @@ class DNSServer:
         elif a == "ms":
             channel = action.get("c", "")
             before = action.get("b")
-            limit = action.get("l", 10)
+            limit = action.get("l", 3)
             if before is not None:
                 before = int(before)
             limit = min(int(limit), 50)
